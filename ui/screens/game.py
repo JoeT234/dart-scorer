@@ -48,6 +48,10 @@ class GameScreen(tk.Frame):
         self._last_stable  = []
         self._stop_event   = threading.Event()
 
+        # Board detection
+        self._board_detection = None   # latest DetectedBoard or None
+        self._detect_ctr      = 0      # frame counter for throttling
+
         # Display
         self.DISPLAY_W = 660
         self.DISPLAY_H = 495
@@ -194,7 +198,21 @@ class GameScreen(tk.Frame):
                                      bg=SURFACE, fg=TEXT, anchor="w")
         self._leaves_lbl.pack(fill="x", pady=(2, 0))
 
-        separator(inner, color=BORDER).pack(fill="x", pady=16)
+        separator(inner, color=BORDER).pack(fill="x", pady=(16, 8))
+
+        # Board detection indicator
+        det_row = tk.Frame(inner, bg=SURFACE)
+        det_row.pack(fill="x", pady=(0, 4))
+        tk.Label(det_row, text="BOARD", font=FONT_CAPTION,
+                 bg=SURFACE, fg=TEXT_DIM).pack(side="left", padx=(0, 8))
+        self._det_dot = tk.Canvas(det_row, width=10, height=10,
+                                   bg=SURFACE, highlightthickness=0)
+        self._det_dot.pack(side="left", padx=(0, 6))
+        self._det_label = tk.Label(det_row, text="Scanning...",
+                                    font=FONT_CAPTION, bg=SURFACE, fg=TEXT_DIM, anchor="w")
+        self._det_label.pack(side="left", fill="x", expand=True)
+
+        separator(inner, color=BORDER).pack(fill="x", pady=(8, 8))
 
         # Action buttons
         self._auto_calib_btn = tk.Button(inner, text="✨  Auto Calibrate",
@@ -264,6 +282,17 @@ class GameScreen(tk.Frame):
 
         frame, _ = self.detector.read_frame()
         if frame is not None:
+            # Board detection — run every 5 frames, non-blocking
+            self._detect_ctr += 1
+            if self._detect_ctr % 5 == 0:
+                bd = self.detector.detect_board(frame)
+                if bd is not None and bd.confidence > 0.25:
+                    self._board_detection = bd
+                elif self._detect_ctr % 30 == 0:
+                    # Only clear after 30 frames of consecutive no-detect to avoid flicker
+                    self._board_detection = None
+                self._update_det_indicator()
+
             if self.state == STATE_DETECTING:
                 stable = self.detector.get_stable_dart_positions(frame)
                 if len(stable) > len(self._last_stable):
@@ -283,6 +312,9 @@ class GameScreen(tk.Frame):
         display = frame.copy()
         h, w = display.shape[:2]
 
+        # Detection ellipse / scanning corners (background layer)
+        self._draw_detection_overlay(display)
+
         # Calibration crosses
         for i, (cx, cy) in enumerate(self.calib_coords):
             if cx >= 0:
@@ -296,11 +328,11 @@ class GameScreen(tk.Frame):
         if self.state == STATE_CALIBRATING and self.calib_index < 4:
             msg = f"Click  {self.calib_labels[self.calib_index]}  ({self.calib_index+1} / 4)"
             tw = len(msg) * 8
-            cv2.rectangle(display, (8, 8), (tw + 16, 34), (14, 14, 30), -1)
-            cv2.putText(display, msg, (14, 26),
+            cv2.rectangle(display, (8, 44), (tw + 16, 70), (14, 14, 30), -1)
+            cv2.putText(display, msg, (14, 62),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 180, 255), 1)
 
-        # Board overlay rings
+        # Board overlay rings (post-calibration)
         if self.H_matrix is not None:
             self._draw_board_overlay(display)
 
@@ -315,7 +347,97 @@ class GameScreen(tk.Frame):
             cv2.putText(display, label, (px+14, py-6),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.65, (b, g, r), 2)
 
+        # HUD badge (top layer)
+        self._draw_hud_badge(display)
+
         return display
+
+    def _draw_detection_overlay(self, frame):
+        """Draw the board detection ellipse or scanning-corner brackets."""
+        bd = self._board_detection
+        h, w = frame.shape[:2]
+        min_dim = min(w, h)
+
+        if bd is not None:
+            cx = int(bd.cx_n * w)
+            cy = int(bd.cy_n * h)
+            a  = max(1, int(bd.a_n * min_dim))
+            b  = max(1, int(bd.b_n * min_dim))
+            angle = bd.angle_deg
+
+            if bd.confidence > 0.6:
+                color     = (16, 212, 138)   # teal — high confidence
+                thickness = 2
+            else:
+                color     = (245, 158, 11)   # gold — low confidence
+                thickness = 1
+
+            # Outer double ring ellipse
+            cv2.ellipse(frame, (cx, cy), (a, b), angle, 0, 360, color, thickness)
+
+            # Inner hint ellipse (≈ bull area, scaled way down)
+            bull_frac = 0.07
+            a_b = max(1, int(a * bull_frac))
+            b_b = max(1, int(b * bull_frac))
+            cv2.ellipse(frame, (cx, cy), (a_b, b_b), angle, 0, 360, color, thickness)
+
+            # Centre crosshair
+            cv2.drawMarker(frame, (cx, cy), color, cv2.MARKER_CROSS, 16, 1)
+        else:
+            # Scanning bracket corners — subtle animated feel
+            sc = (60, 60, 110)
+            ln, mg, tk_ = 36, 24, 2
+            corners = [
+                (mg, mg,   1,  1),
+                (w-mg, mg, -1,  1),
+                (mg, h-mg,  1, -1),
+                (w-mg, h-mg, -1, -1),
+            ]
+            for cx2, cy2, sx, sy in corners:
+                cv2.line(frame, (cx2, cy2), (cx2 + sx*ln, cy2), sc, tk_)
+                cv2.line(frame, (cx2, cy2), (cx2, cy2 + sy*ln), sc, tk_)
+
+    def _draw_hud_badge(self, frame):
+        """Small status pill in the top-left of the camera feed."""
+        bd = self._board_detection
+        if bd is not None:
+            dot  = (16, 212, 138)
+            text = f"BOARD DETECTED  [{bd.method}]"
+        else:
+            dot  = (90, 90, 140)
+            text = "SCANNING FOR BOARD..."
+
+        pad_l, pad_t = 10, 8
+        text_w = len(text) * 7 + 36
+        x0, y0, x1, y1 = pad_l, pad_t, pad_l + text_w, pad_t + 26
+
+        # Semi-transparent dark pill
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (x0, y0), (x1, y1), (10, 10, 22), cv2.FILLED)
+        cv2.addWeighted(overlay, 0.72, frame, 0.28, 0, frame)
+        cv2.rectangle(frame, (x0, y0), (x1, y1), (40, 40, 65), 1)
+
+        # Status dot
+        cv2.circle(frame, (x0 + 14, y0 + 13), 5, dot, -1)
+
+        # Text
+        cv2.putText(frame, text, (x0 + 24, y0 + 18),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.42, (190, 190, 210), 1)
+
+    def _update_det_indicator(self):
+        """Refresh the sidebar board-detection badge."""
+        bd = self._board_detection
+        if bd is not None:
+            color = TEAL if bd.confidence > 0.6 else GOLD
+            label = f"Detected  ({bd.method})"
+            fg    = TEXT
+        else:
+            color = BORDER
+            label = "Scanning..."
+            fg    = TEXT_DIM
+        self._det_dot.delete("all")
+        self._det_dot.create_oval(1, 1, 9, 9, fill=color, outline="")
+        self._det_label.config(text=label, fg=fg)
 
     def _draw_board_overlay(self, frame):
         if self.H_matrix is None:
@@ -341,23 +463,23 @@ class GameScreen(tk.Frame):
 
     def _auto_calibrate(self):
         """
-        Detect the dartboard circle using Hough transforms and automatically
-        place the 4 calibration points based on standard board geometry.
-        Segment 20 must be at the top of the board for this to work.
+        Detect the dartboard (ellipse at any camera angle) and automatically
+        place the 4 calibration points using an affine projection.
+        Segment 20 must be at the top of the board for correct scoring.
         """
         self._set_status("calibrate", "Auto-calibrating — analysing frame...")
         self._auto_calib_btn.config(state="disabled", text="⏳  Detecting...")
         self.update_idletasks()
 
-        # Grab several frames and average the detected circle for stability
+        # Grab several frames and average the detections for stability
         detections = []
-        for _ in range(8):
+        for _ in range(12):
             frame, _ = self.detector.read_frame()
             if frame is None:
                 continue
-            result = self.detector.auto_detect_board(frame)
-            if result is not None:
-                detections.append(result)
+            bd = self.detector.detect_board(frame)
+            if bd is not None and bd.confidence > 0.25:
+                detections.append(bd)
 
         self._auto_calib_btn.config(state="normal", text="✨  Auto Calibrate")
 
@@ -367,36 +489,51 @@ class GameScreen(tk.Frame):
                              "or use Manual Calibrate.")
             return
 
-        cx_norm = float(np.mean([d[0] for d in detections]))
-        cy_norm = float(np.mean([d[1] for d in detections]))
-        r_norm  = float(np.mean([d[2] for d in detections]))
+        # Average the detections
+        cx_n  = float(np.mean([d.cx_n      for d in detections]))
+        cy_n  = float(np.mean([d.cy_n      for d in detections]))
+        a_n   = float(np.mean([d.a_n       for d in detections]))
+        b_n   = float(np.mean([d.b_n       for d in detections]))
+        angle = float(np.mean([d.angle_deg for d in detections]))
 
-        # Get actual frame size to work in pixels
         frame, _ = self.detector.read_frame()
         if frame is None:
             self._set_status("error", "Camera read failed.")
             return
         h_px, w_px = frame.shape[:2]
+        min_dim = float(min(w_px, h_px))
 
-        cx_px = cx_norm * w_px
-        cy_px = cy_norm * h_px
-        r_px  = r_norm * min(w_px, h_px)  # detected circle radius in pixels
+        # scoring_radii[-1] = outer_double_outer_radius / board_diameter  ≈ 0.377
+        h_score = float(self.scorer.scoring_radii[-1])
 
-        # The detected circle ≈ outer double ring.
-        # scorer.scoring_radii[-1] = double-ring outer radius as fraction of
-        # the full board diameter (451 mm).  Invert to get full board size.
-        h_score = float(self.scorer.scoring_radii[-1])   # ≈ 0.377
-        board_diam_px = r_px / h_score                   # full board diameter
+        cx_px = cx_n * w_px
+        cy_px = cy_n * h_px
 
-        # boardplane_calibration_coords are in [0,1] space where 0.5 = board centre.
-        # bp_order maps self.calib_coords[0..3] → boardplane indices [0,3,2,1]
+        # Affine scale: pixels per unit board-plane distance along each axis.
+        # a_n * min_dim  = semi-major of the outer double ring in pixels.
+        # a_n * min_dim / h_score = "board diameter equivalent" along major axis.
+        scale_major = (a_n * min_dim) / h_score
+        scale_minor = (b_n * min_dim) / h_score
+
+        phi     = np.radians(angle)
+        cos_phi = np.cos(phi)
+        sin_phi = np.sin(phi)
+
+        # boardplane_calibration_coords are in [0,1]; centre = 0.5.
+        # bp_order maps self.calib_coords[0..3] → boardplane indices [0,3,2,1].
         bp_order = [0, 3, 2, 1]
         for i, bp_i in enumerate(bp_order):
             bx, by = self.scorer.boardplane_calibration_coords[bp_i]
-            dx = bx - 0.5
+            dx = bx - 0.5   # board-plane offset, fraction of board diameter
             dy = by - 0.5
-            px = cx_px + dx * board_diam_px
-            py = cy_px + dy * board_diam_px
+
+            # Affine projection: board plane → image (handles ellipse / camera tilt)
+            # Board x → major-axis direction, board y → minor-axis direction
+            ox = dx * scale_major * cos_phi - dy * scale_minor * sin_phi
+            oy = dx * scale_major * sin_phi + dy * scale_minor * cos_phi
+
+            px = cx_px + ox
+            py = cy_px + oy
             self.calib_coords[i] = [px / w_px, py / h_px]
 
         self.calib_index = 4
