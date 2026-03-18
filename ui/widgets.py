@@ -156,27 +156,33 @@ class DartSlot(tk.Canvas):
 
     def set_empty(self):
         self.delete("all")
-        # dashed border
-        self.create_rectangle(3, 3, self.W-3, self.H-3,
-                              outline=BORDER_BRIGHT, width=1,
-                              dash=(4, 4))
-        self.create_text(self.W//2, self.H//2, text="—",
+        # Dart index badge top-left
+        self.create_text(10, 10, text=f"#{self._index + 1}",
+                         font=("Helvetica", 7), fill=TEXT_DIM)
+        # Dashed border
+        self.create_rectangle(3, 3, self.W - 3, self.H - 3,
+                              outline=BORDER_BRIGHT, width=1, dash=(4, 4))
+        # Dash placeholder
+        self.create_text(self.W // 2, self.H // 2 + 2, text="—",
                          font=FONT_SCORE_SM, fill=TEXT_DIM)
 
     def set_score(self, notation, points):
         self.delete("all")
-        # filled border in dart color
-        self.create_rectangle(3, 3, self.W-3, self.H-3,
-                              outline=self._color, width=2)
-        # subtle tint bg
-        self.create_rectangle(4, 4, self.W-4, self.H-4,
+        # Subtle tint background
+        self.create_rectangle(3, 3, self.W - 3, self.H - 3,
                               fill=self._dim_color(), outline="")
-        # notation text
-        self.create_text(self.W//2, self.H//2 - 8,
+        # Colored border
+        self.create_rectangle(3, 3, self.W - 3, self.H - 3,
+                              outline=self._color, width=2, fill="")
+        # Dart index badge top-left in dart color
+        self.create_text(10, 9, text=f"#{self._index + 1}",
+                         font=("Helvetica", 7, "bold"), fill=self._color)
+        # Notation — centred, large
+        self.create_text(self.W // 2, self.H // 2 - 6,
                          text=notation, font=FONT_SCORE_SM, fill=self._color)
-        # points below
-        self.create_text(self.W//2, self.H//2 + 14,
-                         text=str(points), font=FONT_CAPTION, fill=TEXT_MID)
+        # Points — centred, smaller
+        self.create_text(self.W // 2, self.H // 2 + 14,
+                         text=f"{points} pts", font=FONT_CAPTION, fill=TEXT_MID)
 
     def _dim_color(self):
         # Return a very dark version of the dart color

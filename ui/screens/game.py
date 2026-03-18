@@ -415,11 +415,27 @@ class GameScreen(tk.Frame):
             px, py = int(dx * w), int(dy * h)
             hex_c = DART_COLORS[i % 3].lstrip("#")
             r, g, b = [int(hex_c[j:j+2], 16) for j in (0, 2, 4)]
-            cv2.circle(display, (px, py), 10, (b, g, r), 2)
-            cv2.circle(display, (px, py), 3, (b, g, r), -1)
+            color = (b, g, r)
             label = self.current_darts[i] if i < len(self.current_darts) else "?"
-            cv2.putText(display, label, (px+14, py-6),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, (b, g, r), 2)
+
+            # Dart shaft pointing upward
+            shaft_y = max(0, py - 32)
+            cv2.line(display, (px, py - 6), (px, shaft_y), color, 2)
+
+            # Dart tip (filled circle + ring)
+            cv2.circle(display, (px, py), 6, color, -1)
+            cv2.circle(display, (px, py), 9, color, 1)
+
+            # Score label with dark background pill
+            tw  = len(label) * 8 + 12
+            lx  = px - tw // 2
+            ly  = shaft_y - 4
+            cv2.rectangle(display, (lx - 2, ly - 16), (lx + tw, ly + 2),
+                          (10, 10, 22), cv2.FILLED)
+            cv2.rectangle(display, (lx - 2, ly - 16), (lx + tw, ly + 2),
+                          color, 1)
+            cv2.putText(display, label, (lx, ly - 2),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 1)
 
         # HUD badge (top layer)
         self._draw_hud_badge(display)
