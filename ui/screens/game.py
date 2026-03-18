@@ -18,6 +18,51 @@ STATE_CALIBRATING = "calibrating"
 STATE_WAITING     = "waiting"
 STATE_DETECTING   = "detecting"
 
+# Common dart checkout combinations (remaining → notation hint)
+CHECKOUTS = {
+    170: "T20 T20 DB",  167: "T20 T19 DB",  164: "T20 T18 DB",
+    161: "T20 T17 DB",  160: "T20 T20 D20", 158: "T20 T20 D19",
+    157: "T20 T19 D20", 156: "T20 T20 D18", 155: "T20 T19 D19",
+    154: "T20 T18 D18", 153: "T20 T19 D18", 152: "T20 T20 D16",
+    151: "T20 T17 D20", 150: "T20 T18 D18", 149: "T20 T19 D16",
+    148: "T20 T20 D14", 147: "T20 T17 D18", 146: "T20 T18 D16",
+    145: "T20 T15 D20", 144: "T20 T20 D12", 143: "T20 T17 D16",
+    142: "T20 T14 D20", 141: "T20 T15 D18", 140: "T20 T20 D10",
+    139: "T20 T13 D20", 138: "T20 T14 D18", 137: "T20 T19 D10",
+    136: "T20 T20 D8",  135: "T20 T17 D12", 134: "T20 T14 D16",
+    133: "T20 T19 D8",  132: "T20 T16 D12", 131: "T20 T13 D16",
+    130: "T20 T18 D8",  129: "T19 T16 D12", 128: "T18 T14 D16",
+    127: "T20 T17 D8",  126: "T19 T15 D12", 125: "T20 T19 D4",
+    124: "T20 T16 D8",  123: "T19 T16 D9",  122: "T18 T20 D4",
+    121: "T20 T11 D14", 120: "T20 S20 D20", 119: "T19 T12 D13",
+    118: "T20 S18 D20", 117: "T20 S17 D20", 116: "T20 S16 D20",
+    115: "T20 S15 D20", 114: "T20 S14 D20", 113: "T20 S13 D20",
+    112: "T20 S20 D16", 111: "T20 S19 D16", 110: "T20 S18 D16",
+    109: "T20 S17 D16", 108: "T20 S16 D16", 107: "T19 S18 D16",
+    106: "T20 S14 D16", 105: "T20 S13 D16", 104: "T20 S12 D16",
+    103: "T20 S11 D16", 102: "T20 S10 D16", 101: "T17 D25",
+    100: "T20 D20",  99: "T19 D21",  98: "T20 D19",  97: "T19 D20",
+     96: "T20 D18",  95: "T19 D19",  94: "T18 D20",  93: "T19 D18",
+     92: "T20 D16",  91: "T17 D20",  90: "T18 D18",  89: "T19 D16",
+     88: "T20 D14",  87: "T17 D18",  86: "T18 D16",  85: "T19 D14",
+     84: "T20 D12",  83: "T17 D16",  82: "T14 D20",  81: "T19 D12",
+     80: "T20 D10",  79: "T19 D11",  78: "T18 D12",  77: "T19 D10",
+     76: "T20 D8",   75: "T17 D12",  74: "T14 D16",  73: "T19 D8",
+     72: "T16 D12",  71: "T13 D16",  70: "T18 D8",   69: "T19 D6",
+     68: "T20 D4",   67: "T17 D8",   66: "T10 D18",  65: "T19 D4",
+     64: "T16 D8",   63: "T13 D12",  62: "T10 D16",  61: "T15 D8",
+     60: "S20 D20",  59: "S19 D20",  58: "S18 D20",  57: "S17 D20",
+     56: "T16 D4",   55: "S15 D20",  54: "S14 D20",  53: "S13 D20",
+     52: "S12 D20",  51: "S11 D20",  50: "DB",       49: "S9 D20",
+     48: "S8 D20",   47: "S7 D20",   46: "S6 D20",   45: "S5 D20",
+     44: "S4 D20",   43: "S3 D20",   42: "S2 D20",   41: "S1 D20",
+     40: "D20",      38: "D19",      36: "D18",      34: "D17",
+     32: "D16",      30: "D15",      28: "D14",      26: "D13",
+     24: "D12",      22: "D11",      20: "D10",      18: "D9",
+     16: "D8",       14: "D7",       12: "D6",       10: "D5",
+      8: "D4",        6: "D3",        4: "D2",        2: "D1",
+}
+
 
 class GameScreen(tk.Frame):
     def __init__(self, parent, game_config, on_back, on_game_over=None):
@@ -204,6 +249,10 @@ class GameScreen(tk.Frame):
         self._leaves_lbl = tk.Label(inner, text="", font=FONT_SCORE_MED,
                                      bg=SURFACE, fg=TEXT, anchor="w")
         self._leaves_lbl.pack(fill="x", pady=(0, 0))
+
+        self._checkout_lbl = tk.Label(inner, text="", font=FONT_CAPTION,
+                                       bg=SURFACE, fg=TEAL, anchor="w")
+        self._checkout_lbl.pack(fill="x")
 
         separator(inner, color=BORDER).pack(fill="x", pady=(8, 6))
 
@@ -634,6 +683,11 @@ class GameScreen(tk.Frame):
     # ════════════════════════════════════════════════════════════
 
     def _capture_reference(self):
+        if self.H_matrix is None:
+            self._set_status("error",
+                             "Calibrate the board first before capturing reference.",
+                             timeout_ms=3000)
+            return
         ok = self.detector.capture_reference()
         self.detector.reset_darts()
         self._last_stable = []
@@ -681,6 +735,7 @@ class GameScreen(tk.Frame):
         if not darts:
             self._visit_total.config(text="")
             self._leaves_lbl.config(text="")
+            self._checkout_lbl.config(text="")
             return
 
         total     = sum(self.game.get_score_for_dart(d) for d in darts if d)
@@ -690,11 +745,18 @@ class GameScreen(tk.Frame):
 
         if remaining < 0 or remaining == 1:
             self._leaves_lbl.config(text="BUST", fg=ACCENT)
+            self._checkout_lbl.config(text="")
         elif remaining == 0:
             self._leaves_lbl.config(text="CHECKOUT!", fg=TEAL)
+            self._checkout_lbl.config(text="")
             self._set_status("ok", "CHECKOUT! — press Enter to commit 🎯")
         else:
             self._leaves_lbl.config(text=f"Leaves  {remaining}", fg=TEXT)
+            hint = CHECKOUTS.get(remaining, "")
+            if hint:
+                self._checkout_lbl.config(text=f"→  {hint}", fg=TEAL)
+            else:
+                self._checkout_lbl.config(text="")
 
     def _update_scoreboard(self):
         avgs = self.game.averages
