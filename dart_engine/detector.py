@@ -29,9 +29,20 @@ class DartDetector:
         self.MAX_CONTOUR_AREA = 4000
 
     def open(self):
-        self.cap = cv2.VideoCapture(self.camera_index)
-        if not self.cap.isOpened():
-            raise RuntimeError(f"Cannot open camera {self.camera_index}")
+        # Try the requested index first, then fall back through 0-3
+        indices_to_try = list(dict.fromkeys([self.camera_index, 0, 1, 2, 3]))
+        for idx in indices_to_try:
+            cap = cv2.VideoCapture(idx)
+            if cap.isOpened():
+                self.camera_index = idx
+                self.cap = cap
+                break
+            cap.release()
+        else:
+            raise RuntimeError(
+                "No webcam found. Make sure your camera is connected and not "
+                "in use by another app, then restart."
+            )
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
