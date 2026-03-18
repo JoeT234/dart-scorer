@@ -68,6 +68,43 @@ class DartDetector:
             return True
         return False
 
+    def auto_detect_board(self, frame):
+        """
+        Detect the dartboard circle via Hough Circle Transform.
+        Returns (cx_norm, cy_norm, r_norm) all normalised to [0,1],
+        where r_norm is radius / min(frame_w, frame_h).
+        Returns None if no circle found.
+        """
+        h, w = frame.shape[:2]
+        min_dim = min(h, w)
+
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        blurred = cv2.GaussianBlur(gray, (9, 9), 2)
+
+        min_r = int(min_dim * 0.10)
+        max_r = int(min_dim * 0.55)
+
+        # Try two sets of params — strict first, then lenient
+        for dp, p1, p2 in [(1.0, 100, 35), (1.2, 60, 22)]:
+            circles = cv2.HoughCircles(
+                blurred, cv2.HOUGH_GRADIENT,
+                dp=dp, minDist=min_dim * 0.3,
+                param1=p1, param2=p2,
+                minRadius=min_r, maxRadius=max_r,
+            )
+            if circles is not None:
+                break
+
+        if circles is None:
+            return None
+
+        circles = np.round(circles[0]).astype(float)
+        # Prefer the circle whose centre is closest to the image centre
+        cx_img, cy_img = w / 2.0, h / 2.0
+        best = min(circles, key=lambda c: (c[0] - cx_img) ** 2 + (c[1] - cy_img) ** 2)
+        cx, cy, r = best
+        return cx / w, cy / h, r / min_dim
+
     def reset_darts(self):
         """Reset dart state (after visitor commits their score)."""
         with self._lock:

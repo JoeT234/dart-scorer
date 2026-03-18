@@ -197,9 +197,13 @@ class GameScreen(tk.Frame):
         separator(inner, color=BORDER).pack(fill="x", pady=16)
 
         # Action buttons
-        self._calib_btn = tk.Button(inner, text="🎯  Calibrate Board",
-                                     command=self._start_calibration, **BTN_PRIMARY)
-        self._calib_btn.pack(fill="x", pady=3, ipady=2)
+        self._auto_calib_btn = tk.Button(inner, text="✨  Auto Calibrate",
+                                          command=self._auto_calibrate, **BTN_PRIMARY)
+        self._auto_calib_btn.pack(fill="x", pady=3, ipady=2)
+
+        self._calib_btn = tk.Button(inner, text="🎯  Manual Calibrate",
+                                     command=self._start_calibration, **BTN_SECONDARY)
+        self._calib_btn.pack(fill="x", pady=3)
 
         self._ref_btn = tk.Button(inner, text="📷  Reset Reference  [R]",
                                    command=self._capture_reference, **BTN_SECONDARY)
@@ -224,9 +228,10 @@ class GameScreen(tk.Frame):
 
         # Hover effects
         for btn, hover, normal in [
-            (self._calib_btn,  ACCENT_HOVER, ACCENT),
-            (self._commit_btn, ACCENT_HOVER, ACCENT),
-            (self._ref_btn,    BORDER_BRIGHT, SURFACE2),
+            (self._auto_calib_btn, ACCENT_HOVER, ACCENT),
+            (self._commit_btn,     ACCENT_HOVER, ACCENT),
+            (self._calib_btn,      BORDER_BRIGHT, SURFACE2),
+            (self._ref_btn,        BORDER_BRIGHT, SURFACE2),
         ]:
             btn.bind("<Enter>", lambda e, b=btn, c=hover: b.config(bg=c))
             btn.bind("<Leave>", lambda e, b=btn, c=normal: b.config(bg=c))
@@ -333,6 +338,69 @@ class GameScreen(tk.Frame):
     # ════════════════════════════════════════════════════════════
     # CALIBRATION
     # ════════════════════════════════════════════════════════════
+
+    def _auto_calibrate(self):
+        """
+        Detect the dartboard circle using Hough transforms and automatically
+        place the 4 calibration points based on standard board geometry.
+        Segment 20 must be at the top of the board for this to work.
+        """
+        self._set_status("calibrate", "Auto-calibrating — analysing frame...")
+        self._auto_calib_btn.config(state="disabled", text="⏳  Detecting...")
+        self.update_idletasks()
+
+        # Grab several frames and average the detected circle for stability
+        detections = []
+        for _ in range(8):
+            frame, _ = self.detector.read_frame()
+            if frame is None:
+                continue
+            result = self.detector.auto_detect_board(frame)
+            if result is not None:
+                detections.append(result)
+
+        self._auto_calib_btn.config(state="normal", text="✨  Auto Calibrate")
+
+        if len(detections) < 3:
+            self._set_status("error",
+                             "Board not detected. Ensure the board is visible and well-lit, "
+                             "or use Manual Calibrate.")
+            return
+
+        cx_norm = float(np.mean([d[0] for d in detections]))
+        cy_norm = float(np.mean([d[1] for d in detections]))
+        r_norm  = float(np.mean([d[2] for d in detections]))
+
+        # Get actual frame size to work in pixels
+        frame, _ = self.detector.read_frame()
+        if frame is None:
+            self._set_status("error", "Camera read failed.")
+            return
+        h_px, w_px = frame.shape[:2]
+
+        cx_px = cx_norm * w_px
+        cy_px = cy_norm * h_px
+        r_px  = r_norm * min(w_px, h_px)  # detected circle radius in pixels
+
+        # The detected circle ≈ outer double ring.
+        # scorer.scoring_radii[-1] = double-ring outer radius as fraction of
+        # the full board diameter (451 mm).  Invert to get full board size.
+        h_score = float(self.scorer.scoring_radii[-1])   # ≈ 0.377
+        board_diam_px = r_px / h_score                   # full board diameter
+
+        # boardplane_calibration_coords are in [0,1] space where 0.5 = board centre.
+        # bp_order maps self.calib_coords[0..3] → boardplane indices [0,3,2,1]
+        bp_order = [0, 3, 2, 1]
+        for i, bp_i in enumerate(bp_order):
+            bx, by = self.scorer.boardplane_calibration_coords[bp_i]
+            dx = bx - 0.5
+            dy = by - 0.5
+            px = cx_px + dx * board_diam_px
+            py = cy_px + dy * board_diam_px
+            self.calib_coords[i] = [px / w_px, py / h_px]
+
+        self.calib_index = 4
+        self._finish_calibration()
 
     def _start_calibration(self):
         self.state       = STATE_CALIBRATING
