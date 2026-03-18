@@ -20,9 +20,10 @@ STATE_DETECTING   = "detecting"
 
 
 class GameScreen(tk.Frame):
-    def __init__(self, parent, game_config, on_back):
+    def __init__(self, parent, game_config, on_back, on_game_over=None):
         super().__init__(parent, bg=BG)
-        self.on_back = on_back
+        self.on_back      = on_back
+        self.on_game_over = on_game_over  # callable(game) → shows winner screen
 
         # Engine
         self.detector = DartDetector(camera_index=game_config["cam_index"])
@@ -44,6 +45,7 @@ class GameScreen(tk.Frame):
         self.state         = STATE_CALIBRATING
         self.current_darts = []
         self.current_dart_img_coords = []
+        # visit_history: list of (player_idx, prev_score, dart_notations)
         self.visit_history = []
         self._last_stable  = []
         self._stop_event   = threading.Event()
@@ -51,6 +53,9 @@ class GameScreen(tk.Frame):
         # Board detection
         self._board_detection = None   # latest DetectedBoard or None
         self._detect_ctr      = 0      # frame counter for throttling
+
+        # Timed status message
+        self._status_timer = None
 
         # Display
         self.DISPLAY_W = 660
@@ -198,12 +203,22 @@ class GameScreen(tk.Frame):
                                      bg=SURFACE, fg=TEXT, anchor="w")
         self._leaves_lbl.pack(fill="x", pady=(2, 0))
 
-        separator(inner, color=BORDER).pack(fill="x", pady=(16, 8))
+        separator(inner, color=BORDER).pack(fill="x", pady=(14, 8))
+
+        # Visit history (last 3 committed visits for current player)
+        tk.Label(inner, text="LAST VISITS", font=FONT_CAPTION,
+                 bg=SURFACE, fg=TEXT_DIM, anchor="w").pack(fill="x", pady=(0, 4))
+        self._history_lbl = tk.Label(inner, text="—", font=FONT_CAPTION,
+                                      bg=SURFACE, fg=TEXT_DIM, anchor="w",
+                                      justify="left")
+        self._history_lbl.pack(fill="x")
+
+        separator(inner, color=BORDER).pack(fill="x", pady=(10, 8))
 
         # Board detection indicator
         det_row = tk.Frame(inner, bg=SURFACE)
         det_row.pack(fill="x", pady=(0, 4))
-        tk.Label(det_row, text="BOARD", font=FONT_CAPTION,
+        tk.Label(det_row, text="CAMERA", font=FONT_CAPTION,
                  bg=SURFACE, fg=TEXT_DIM).pack(side="left", padx=(0, 8))
         self._det_dot = tk.Canvas(det_row, width=10, height=10,
                                    bg=SURFACE, highlightthickness=0)
@@ -214,7 +229,7 @@ class GameScreen(tk.Frame):
 
         separator(inner, color=BORDER).pack(fill="x", pady=(8, 8))
 
-        # Action buttons
+        # Calibration / reference buttons
         self._auto_calib_btn = tk.Button(inner, text="✨  Auto Calibrate",
                                           command=self._auto_calibrate, **BTN_PRIMARY)
         self._auto_calib_btn.pack(fill="x", pady=3, ipady=2)
@@ -227,15 +242,26 @@ class GameScreen(tk.Frame):
                                    command=self._capture_reference, **BTN_SECONDARY)
         self._ref_btn.pack(fill="x", pady=3)
 
-        separator(inner, color=BORDER).pack(fill="x", pady=(8, 8))
+        separator(inner, color=BORDER).pack(fill="x", pady=(8, 6))
 
-        self._add_btn = tk.Button(inner, text="＋  Add Dart  [A]",
+        # Dart / visit controls
+        dart_row = tk.Frame(inner, bg=SURFACE)
+        dart_row.pack(fill="x", pady=2)
+        dart_row.columnconfigure(0, weight=1)
+        dart_row.columnconfigure(1, weight=1)
+
+        self._add_btn = tk.Button(dart_row, text="＋  Dart  [A]",
                                    command=self._add_dart_manual, **BTN_GHOST)
-        self._add_btn.pack(fill="x", pady=2)
+        self._add_btn.grid(row=0, column=0, sticky="ew", padx=(0, 2))
 
-        self._undo_btn = tk.Button(inner, text="↩  Undo Last Dart",
+        self._undo_btn = tk.Button(dart_row, text="↩  Undo Dart",
                                     command=self._undo_dart, **BTN_GHOST)
-        self._undo_btn.pack(fill="x", pady=2)
+        self._undo_btn.grid(row=0, column=1, sticky="ew", padx=(2, 0))
+
+        self._undo_visit_btn = tk.Button(inner, text="⏮  Undo Visit  [U]",
+                                          command=self._undo_committed_visit,
+                                          **BTN_GHOST)
+        self._undo_visit_btn.pack(fill="x", pady=(4, 0))
 
         # Commit — main CTA
         tk.Frame(inner, bg=SURFACE).pack(fill="both", expand=True)
@@ -246,8 +272,8 @@ class GameScreen(tk.Frame):
 
         # Hover effects
         for btn, hover, normal in [
-            (self._auto_calib_btn, ACCENT_HOVER, ACCENT),
-            (self._commit_btn,     ACCENT_HOVER, ACCENT),
+            (self._auto_calib_btn, ACCENT_HOVER,  ACCENT),
+            (self._commit_btn,     ACCENT_HOVER,  ACCENT),
             (self._calib_btn,      BORDER_BRIGHT, SURFACE2),
             (self._ref_btn,        BORDER_BRIGHT, SURFACE2),
         ]:
@@ -264,6 +290,8 @@ class GameScreen(tk.Frame):
         self.bind_all("R",         lambda e: self._capture_reference())
         self.bind_all("a",         lambda e: self._add_dart_manual())
         self.bind_all("A",         lambda e: self._add_dart_manual())
+        self.bind_all("u",         lambda e: self._undo_committed_visit())
+        self.bind_all("U",         lambda e: self._undo_committed_visit())
         self.bind_all("<Escape>",  lambda e: self._back_to_menu())
 
     # ════════════════════════════════════════════════════════════
@@ -277,7 +305,7 @@ class GameScreen(tk.Frame):
             messagebox.showerror("Camera Error", str(e))
 
     def _video_loop(self):
-        if not self.winfo_exists():
+        if self._stop_event.is_set() or not self.winfo_exists():
             return
 
         frame, _ = self.detector.read_frame()
@@ -289,7 +317,6 @@ class GameScreen(tk.Frame):
                 if bd is not None and bd.confidence > 0.25:
                     self._board_detection = bd
                 elif self._detect_ctr % 30 == 0:
-                    # Only clear after 30 frames of consecutive no-detect to avoid flicker
                     self._board_detection = None
                 self._update_det_indicator()
 
@@ -306,7 +333,8 @@ class GameScreen(tk.Frame):
             self._photo = photo
             self.canvas.create_image(0, 0, image=photo, anchor="nw")
 
-        self.after(33, self._video_loop)
+        if not self._stop_event.is_set():
+            self.after(33, self._video_loop)
 
     def _prepare_display(self, frame):
         display = frame.copy()
@@ -440,6 +468,7 @@ class GameScreen(tk.Frame):
         self._det_label.config(text=label, fg=fg)
 
     def _draw_board_overlay(self, frame):
+        """Draw scoring ring circles projected through the calibration homography."""
         if self.H_matrix is None:
             return
         try:
@@ -453,9 +482,16 @@ class GameScreen(tk.Frame):
         c_img = cv2.perspectiveTransform(center_bp, inv_H)
         cx, cy = int(c_img[0][0][0]), int(c_img[0][0][1])
         scale = size * 0.85
-        for r_norm in self.scorer.scoring_radii[1:]:
+
+        # Ring colours: DB=teal, SB=teal, segments=blue, rings=accent
+        ring_colors = [(16, 212, 138), (16, 212, 138),
+                       (80, 140, 255), (232, 54, 93),
+                       (80, 140, 255), (232, 54, 93), (80, 140, 255)]
+        for idx, r_norm in enumerate(self.scorer.scoring_radii[1:]):
             r_px = int(r_norm * scale)
-            cv2.circle(frame, (cx, cy), r_px, (60, 80, 200), 1)
+            color = ring_colors[idx] if idx < len(ring_colors) else (80, 100, 180)
+            cv2.circle(frame, (cx, cy), r_px, color, 1)
+        cv2.drawMarker(frame, (cx, cy), (16, 212, 138), cv2.MARKER_CROSS, 14, 1)
 
     # ════════════════════════════════════════════════════════════
     # CALIBRATION
@@ -630,7 +666,7 @@ class GameScreen(tk.Frame):
             self._leaves_lbl.config(text="")
             return
 
-        total = sum(self.game.get_score_for_dart(d) for d in darts if d)
+        total     = sum(self.game.get_score_for_dart(d) for d in darts if d)
         remaining = self.game.scores[self.game.current_player] - total
 
         self._visit_total.config(text=f"Visit total:  {total}")
@@ -638,7 +674,8 @@ class GameScreen(tk.Frame):
         if remaining < 0 or remaining == 1:
             self._leaves_lbl.config(text="BUST", fg=ACCENT)
         elif remaining == 0:
-            self._leaves_lbl.config(text="CHECKOUT  🎯", fg=TEAL)
+            self._leaves_lbl.config(text="CHECKOUT!", fg=TEAL)
+            self._set_status("ok", "CHECKOUT! — press Enter to commit 🎯")
         else:
             self._leaves_lbl.config(text=f"Leaves  {remaining}", fg=TEXT)
 
@@ -650,16 +687,25 @@ class GameScreen(tk.Frame):
                 avg=avgs[i],
                 legs=self.game.leg_scores[i],
                 active=(i == self.game.current_player),
+                total_legs=self.game.num_legs,
             )
         # Update sidebar player indicator
         name = self.game.player_names[self.game.current_player]
         self._turn_lbl.config(text="NOW PLAYING")
         self._player_lbl.config(text=name)
+        # Refresh visit history display
+        self._refresh_visit_history()
 
-    def _set_status(self, kind, msg):
+    def _set_status(self, kind, msg, timeout_ms=0):
         """
         kind: "calibrate" | "active" | "ok" | "error" | "info"
+        timeout_ms: if > 0, revert to a blank/info status after this many ms
         """
+        # Cancel any pending auto-clear
+        if self._status_timer:
+            self.after_cancel(self._status_timer)
+            self._status_timer = None
+
         colors = {
             "calibrate": GOLD,
             "active":    TEAL,
@@ -670,7 +716,34 @@ class GameScreen(tk.Frame):
         dot_color = colors.get(kind, TEXT_MID)
         self._status_dot.delete("all")
         self._status_dot.create_oval(1, 1, 9, 9, fill=dot_color, outline="")
-        self._status_msg.config(text=msg, fg=TEXT_MID)
+        text_color = colors.get(kind, TEXT_MID) if kind == "error" else TEXT_MID
+        self._status_msg.config(text=msg, fg=text_color)
+
+        if timeout_ms > 0:
+            self._status_timer = self.after(
+                timeout_ms,
+                lambda: self._set_status("info", "")
+            )
+
+    def _refresh_visit_history(self):
+        """Show the last 3 committed visits for the current player."""
+        cp = self.game.current_player
+        # visit_history stores (player_idx, prev_score, darts_list)
+        player_visits = [
+            (darts, prev_score)
+            for (pidx, prev_score, darts) in self.visit_history
+            if pidx == cp
+        ]
+        last3 = player_visits[-3:]
+        if not last3:
+            self._history_lbl.config(text="—")
+            return
+        lines = []
+        for darts, _ in reversed(last3):
+            total = sum(self.game.get_score_for_dart(d) for d in darts if d)
+            notation = "  ".join(d for d in darts if d) or "—"
+            lines.append(f"{notation}  →  {total}")
+        self._history_lbl.config(text="\n".join(lines))
 
     # ════════════════════════════════════════════════════════════
     # GAME ACTIONS
@@ -698,14 +771,16 @@ class GameScreen(tk.Frame):
         if self.state == STATE_CALIBRATING:
             return
         if not self.current_darts:
-            self._set_status("info", "No darts detected yet — throw your darts first.")
+            self._set_status("info", "No darts detected yet — throw your darts first.",
+                             timeout_ms=3000)
             return
 
         prev_score  = self.game.scores[self.game.current_player]
         prev_player = self.game.current_player
+        darts_copy  = list(self.current_darts)
 
         v_score, _, bust, leg_won, game_over = self.game.commit_visit(self.current_darts)
-        self.visit_history.append((prev_player, prev_score))
+        self.visit_history.append((prev_player, prev_score, darts_copy))
 
         self.current_darts = []
         self.current_dart_img_coords = []
@@ -723,11 +798,37 @@ class GameScreen(tk.Frame):
         elif bust:
             self.state = STATE_WAITING
             self._set_status("error",
-                             f"BUST  —  {self.game.player_names[prev_player]} stays at {prev_score}")
+                             f"BUST  —  {self.game.player_names[prev_player]} stays at {prev_score}",
+                             timeout_ms=4000)
+            nxt = self.game.player_names[self.game.current_player]
+            self.after(4100, lambda: self._set_status(
+                "info", f"Next: {nxt}  —  press R to start"
+            ))
         else:
             self.state = STATE_WAITING
             nxt = self.game.player_names[self.game.current_player]
             self._set_status("info", f"Next up: {nxt}  —  press R to capture reference")
+
+    def _undo_committed_visit(self):
+        if not self.visit_history:
+            self._set_status("info", "Nothing to undo.", timeout_ms=2000)
+            return
+        player_idx, prev_score, old_darts = self.visit_history.pop()
+        self.game.undo_visit(player_idx, prev_score)
+
+        self.current_darts = []
+        self.current_dart_img_coords = []
+        self._last_stable  = []
+        self.detector.reset_darts()
+        self.state = STATE_WAITING
+
+        self._update_scoreboard()
+        self._refresh_slots()
+        self._refresh_visit_total()
+        name = self.game.player_names[player_idx]
+        self._set_status("info",
+                         f"Visit undone  —  {name} back to {prev_score}",
+                         timeout_ms=3000)
 
     def _handle_leg_won(self, player_idx):
         name = self.game.player_names[player_idx]
@@ -744,18 +845,29 @@ class GameScreen(tk.Frame):
     def _handle_game_over(self):
         self.state = STATE_WAITING
         self._set_status("ok", f"🎉  {self.game.winner} wins the match!")
-        self.after(400, lambda: messagebox.showinfo(
-            "Game Over",
-            f"🎉  {self.game.winner} wins!\n\n" +
-            "\n".join(f"  {n}:  {s} leg{'s' if s != 1 else ''}"
-                      for n, s in zip(self.game.player_names, self.game.leg_scores))
-        ))
+        # Transition to winner screen after a brief pause
+        if self.on_game_over:
+            self.after(600, lambda: self.on_game_over(self.game))
+        else:
+            self.after(400, lambda: messagebox.showinfo(
+                "Game Over",
+                f"🎉  {self.game.winner} wins!\n\n" +
+                "\n".join(f"  {n}:  {s} leg{'s' if s != 1 else ''}"
+                          for n, s in zip(self.game.player_names, self.game.leg_scores))
+            ))
 
     # ════════════════════════════════════════════════════════════
     # CLEANUP
     # ════════════════════════════════════════════════════════════
 
     def _back_to_menu(self):
+        if self.visit_history and not self.game.game_over:
+            if not messagebox.askyesno(
+                "Leave Game?",
+                "Your current game will be lost.\nAre you sure you want to go back?",
+                icon="warning",
+            ):
+                return
         self._stop_event.set()
         self.detector.close()
         self.on_back()

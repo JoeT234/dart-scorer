@@ -102,11 +102,14 @@ class SetupScreen(tk.Frame):
         btn_outer.grid(row=3, column=0, pady=24)
 
         tk.Button(btn_outer, text="← Back", command=on_back, **BTN_GHOST).pack(side="left", padx=8)
-        start_btn = tk.Button(btn_outer, text="START GAME  →",
+        start_btn = tk.Button(btn_outer, text="▶   START GAME",
                               command=self._start, **BTN_PRIMARY)
-        start_btn.pack(side="left", padx=8, ipady=4)
+        start_btn.pack(side="left", padx=8, ipady=6)
         start_btn.bind("<Enter>", lambda e: start_btn.config(bg=ACCENT_HOVER))
         start_btn.bind("<Leave>", lambda e: start_btn.config(bg=ACCENT))
+
+        # Enter key shortcut
+        self.bind_all("<Return>", lambda e: self._start())
 
     # ── Helpers ─────────────────────────────────────────────────
 
@@ -169,7 +172,11 @@ class SetupScreen(tk.Frame):
                        lambda e, f=entry_frame: f.config(bg=BORDER))
 
     def _start(self):
-        names = [v.get().strip() or f"Player {i+1}" for i, v in enumerate(self.name_vars)]
+        names = []
+        for i, v in enumerate(self.name_vars):
+            raw  = v.get().strip()
+            name = raw[:20] if raw else f"Player {i+1}"   # max 20 chars
+            names.append(name)
         self.on_start_game(
             mode=self.game_mode.get(),
             starting_score=int(self.game_mode.get()),

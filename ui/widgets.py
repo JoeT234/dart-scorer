@@ -222,9 +222,10 @@ class PlayerCard(tk.Frame):
                                    fg=TEXT_DIM, anchor="center")
         self._info_lbl.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 8))
 
-    def update(self, score, avg, legs, active):
+    def update(self, score, avg, legs, active, total_legs=None):
         self._score_var.set(str(score))
-        self._info_var.set(f"Avg  {avg:.0f}  ·  Legs  {legs}")
+        legs_txt = f"{legs}/{total_legs}" if total_legs else str(legs)
+        self._info_var.set(f"avg  {avg:.0f}  ·  legs  {legs_txt}")
         self._active = active
         if active:
             self._bar.config(bg=ACCENT)
@@ -234,10 +235,10 @@ class PlayerCard(tk.Frame):
             for w in (self._name_lbl, self._score_lbl, self._info_lbl, self._bar):
                 w.config(bg=SURFACE2)
         else:
-            self._bar.config(bg=SURFACE)
+            self._bar.config(bg=BORDER)     # subtle top rule when inactive
             self._name_lbl.config(fg=TEXT_MID)
             self._score_lbl.config(fg=TEXT_DIM)
             self.config(bg=SURFACE)
             for w in (self._name_lbl, self._score_lbl, self._info_lbl):
                 w.config(bg=SURFACE)
-            self._bar.config(bg=SURFACE)
+            self._bar.config(bg=BORDER)

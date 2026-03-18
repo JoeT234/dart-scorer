@@ -7,6 +7,7 @@ Dark premium palette inspired by sports scoreboards + gaming UIs.
 BG            = "#0e0e18"   # main app background
 SURFACE       = "#15152a"   # card / panel surface
 SURFACE2      = "#1c1c34"   # elevated card (hover, active)
+SURFACE3      = "#232342"   # tooltip / pop-up surface
 BORDER        = "#2a2a48"   # subtle card borders
 BORDER_BRIGHT = "#3d3d68"   # highlighted border
 
@@ -16,9 +17,11 @@ ACCENT_DIM    = "#2a0d18"   # accent bg tint
 
 TEAL          = "#10d48a"   # success / positive scores
 TEAL_DIM      = "#06301f"
+TEAL_HOVER    = "#1af0a0"
 
 GOLD          = "#f59e0b"   # current-player highlight
 GOLD_DIM      = "#2c1c00"
+GOLD_HOVER    = "#fbbf24"
 
 BLUE          = "#38bdf8"   # info / dart 1
 ORANGE        = "#fb923c"   # dart 2
@@ -37,7 +40,7 @@ FONT_HEADING      = ("Helvetica", 18, "bold")
 FONT_SUBHEADING   = ("Helvetica", 13, "bold")
 FONT_BODY         = ("Helvetica", 11)
 FONT_CAPTION      = ("Helvetica", 9)
-FONT_SCORE_HUGE   = ("Helvetica", 54, "bold")
+FONT_SCORE_HUGE   = ("Helvetica", 42, "bold")   # player card score
 FONT_SCORE_BIG    = ("Helvetica", 34, "bold")
 FONT_SCORE_MED    = ("Helvetica", 22, "bold")
 FONT_SCORE_SM     = ("Helvetica", 15, "bold")
@@ -71,4 +74,14 @@ BTN_GHOST = dict(
     borderwidth=0,
     activebackground=SURFACE,
     activeforeground=TEXT,
+)
+
+BTN_TEAL = dict(
+    bg=TEAL, fg=BG,
+    font=("Helvetica", 12, "bold"),
+    relief="flat", cursor="hand2",
+    padx=24, pady=10,
+    borderwidth=0,
+    activebackground=TEAL_HOVER,
+    activeforeground=BG,
 )

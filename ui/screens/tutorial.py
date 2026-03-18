@@ -144,11 +144,18 @@ class TutorialScreen(tk.Frame):
         for w in self._content.winfo_children():
             w.destroy()
 
-        # Header
+        # Scrollable content area
+        self._content.rowconfigure(2, weight=1)
+
+        # Header chip + title row
         header = tk.Frame(self._content, bg=BG)
         header.grid(row=0, column=0, sticky="ew", padx=50, pady=(40, 0))
-        tk.Label(header, text=sec["icon"], font=("Helvetica", 32),
-                 bg=BG).pack(side="left", padx=(0, 12))
+
+        icon_bg = tk.Frame(header, bg=SURFACE2, padx=12, pady=8)
+        icon_bg.pack(side="left", padx=(0, 16))
+        tk.Label(icon_bg, text=sec["icon"], font=("Helvetica", 22),
+                 bg=SURFACE2).pack()
+
         tk.Label(header, text=sec["title"], font=FONT_TITLE,
                  bg=BG, fg=TEXT).pack(side="left")
 
@@ -157,25 +164,26 @@ class TutorialScreen(tk.Frame):
 
         # Steps
         steps_frame = tk.Frame(self._content, bg=BG)
-        steps_frame.grid(row=2, column=0, sticky="nsew", padx=50)
+        steps_frame.grid(row=2, column=0, sticky="nsew", padx=50, pady=(0, 30))
+        steps_frame.columnconfigure(0, weight=1)
 
         for i, (label, body) in enumerate(sec["steps"]):
-            row_f = tk.Frame(steps_frame, bg=BG)
-            row_f.pack(fill="x", pady=10)
+            # Card-style step row
+            step_card = tk.Frame(steps_frame, bg=SURFACE, padx=16, pady=12)
+            step_card.pack(fill="x", pady=5)
+            step_card.columnconfigure(1, weight=1)
 
             # Step number badge
-            badge = tk.Canvas(row_f, width=28, height=28, bg=BG,
+            badge = tk.Canvas(step_card, width=28, height=28, bg=SURFACE,
                               highlightthickness=0)
-            badge.pack(side="left", anchor="nw", padx=(0, 14), pady=2)
+            badge.grid(row=0, column=0, rowspan=2, sticky="n", padx=(0, 14), pady=2)
             badge.create_oval(2, 2, 26, 26, fill=ACCENT_DIM, outline=ACCENT, width=1)
-            badge.create_text(14, 14, text=str(i+1),
+            badge.create_text(14, 14, text=str(i + 1),
                               font=("Helvetica", 9, "bold"), fill=ACCENT)
 
-            text_frame = tk.Frame(row_f, bg=BG)
-            text_frame.pack(side="left", fill="x", expand=True)
-
-            tk.Label(text_frame, text=label, font=FONT_SUBHEADING,
-                     bg=BG, fg=TEXT, anchor="w").pack(fill="x")
-            tk.Label(text_frame, text=body, font=FONT_BODY,
-                     bg=BG, fg=TEXT_MID, anchor="w", justify="left",
-                     wraplength=580).pack(fill="x", pady=(2, 0))
+            tk.Label(step_card, text=label, font=FONT_SUBHEADING,
+                     bg=SURFACE, fg=TEXT, anchor="w").grid(
+                row=0, column=1, sticky="ew")
+            tk.Label(step_card, text=body, font=FONT_BODY,
+                     bg=SURFACE, fg=TEXT_MID, anchor="w", justify="left",
+                     wraplength=560).grid(row=1, column=1, sticky="ew", pady=(3, 0))
