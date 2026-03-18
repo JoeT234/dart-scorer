@@ -78,7 +78,8 @@ class GameScreen(tk.Frame):
         self._build_main_area()
         self._bind_keys()
         self._update_scoreboard()
-        self._set_status("calibrate", "Click 'Calibrate Board' — then click the 4 corners on the camera feed.")
+        self._set_status("calibrate",
+                         "Step 1: Click 'Auto Calibrate' to detect the board  —  or 'Manual Calibrate' to set corners.")
 
     # ── Top scorebar ────────────────────────────────────────────
 
@@ -180,46 +181,35 @@ class GameScreen(tk.Frame):
                                      bg=SURFACE, fg=GOLD, anchor="w")
         self._player_lbl.pack(fill="x", pady=(0, 12))
 
-        separator(inner, color=BORDER).pack(fill="x", pady=(0, 16))
+        separator(inner, color=BORDER).pack(fill="x", pady=(0, 10))
 
         # Dart slots
         tk.Label(inner, text="THIS VISIT", font=FONT_CAPTION,
-                 bg=SURFACE, fg=TEXT_MID, anchor="w").pack(fill="x", pady=(0, 8))
+                 bg=SURFACE, fg=TEXT_MID, anchor="w").pack(fill="x", pady=(0, 6))
 
         slots_frame = tk.Frame(inner, bg=SURFACE)
         slots_frame.pack(fill="x")
         self._dart_slots = []
         for i in range(3):
             slot = DartSlot(slots_frame, dart_index=i)
-            slot.pack(side="left", padx=(0, 6))
+            slot.pack(side="left", padx=(0, 5))
             self._dart_slots.append(slot)
 
-        # Visit total
-        self._visit_total = tk.Label(inner, text="", font=FONT_BODY,
+        # Visit total + leaves
+        total_row = tk.Frame(inner, bg=SURFACE)
+        total_row.pack(fill="x", pady=(8, 0))
+        self._visit_total = tk.Label(total_row, text="", font=FONT_CAPTION,
                                       bg=SURFACE, fg=TEXT_MID, anchor="w")
-        self._visit_total.pack(fill="x", pady=(10, 0))
-
+        self._visit_total.pack(side="left")
         self._leaves_lbl = tk.Label(inner, text="", font=FONT_SCORE_MED,
                                      bg=SURFACE, fg=TEXT, anchor="w")
-        self._leaves_lbl.pack(fill="x", pady=(2, 0))
+        self._leaves_lbl.pack(fill="x", pady=(0, 0))
 
-        separator(inner, color=BORDER).pack(fill="x", pady=(14, 8))
+        separator(inner, color=BORDER).pack(fill="x", pady=(8, 6))
 
-        # Visit history (last 3 committed visits for current player)
-        tk.Label(inner, text="LAST VISITS", font=FONT_CAPTION,
-                 bg=SURFACE, fg=TEXT_DIM, anchor="w").pack(fill="x", pady=(0, 4))
-        self._history_lbl = tk.Label(inner, text="—", font=FONT_CAPTION,
-                                      bg=SURFACE, fg=TEXT_DIM, anchor="w",
-                                      justify="left")
-        self._history_lbl.pack(fill="x")
-
-        separator(inner, color=BORDER).pack(fill="x", pady=(10, 8))
-
-        # Board detection indicator
+        # Board detection indicator + last visit (combined row)
         det_row = tk.Frame(inner, bg=SURFACE)
-        det_row.pack(fill="x", pady=(0, 4))
-        tk.Label(det_row, text="CAMERA", font=FONT_CAPTION,
-                 bg=SURFACE, fg=TEXT_DIM).pack(side="left", padx=(0, 8))
+        det_row.pack(fill="x", pady=(0, 2))
         self._det_dot = tk.Canvas(det_row, width=10, height=10,
                                    bg=SURFACE, highlightthickness=0)
         self._det_dot.pack(side="left", padx=(0, 6))
@@ -227,22 +217,28 @@ class GameScreen(tk.Frame):
                                     font=FONT_CAPTION, bg=SURFACE, fg=TEXT_DIM, anchor="w")
         self._det_label.pack(side="left", fill="x", expand=True)
 
-        separator(inner, color=BORDER).pack(fill="x", pady=(8, 8))
+        # Visit history (compact: 2 lines max)
+        self._history_lbl = tk.Label(inner, text="", font=FONT_CAPTION,
+                                      bg=SURFACE, fg=TEXT_DIM, anchor="w",
+                                      justify="left")
+        self._history_lbl.pack(fill="x", pady=(2, 0))
+
+        separator(inner, color=BORDER).pack(fill="x", pady=(6, 6))
 
         # Calibration / reference buttons
         self._auto_calib_btn = tk.Button(inner, text="✨  Auto Calibrate",
                                           command=self._auto_calibrate, **BTN_PRIMARY)
-        self._auto_calib_btn.pack(fill="x", pady=3, ipady=2)
+        self._auto_calib_btn.pack(fill="x", pady=2, ipady=2)
 
         self._calib_btn = tk.Button(inner, text="🎯  Manual Calibrate",
                                      command=self._start_calibration, **BTN_SECONDARY)
-        self._calib_btn.pack(fill="x", pady=3)
+        self._calib_btn.pack(fill="x", pady=2)
 
         self._ref_btn = tk.Button(inner, text="📷  Reset Reference  [R]",
                                    command=self._capture_reference, **BTN_SECONDARY)
-        self._ref_btn.pack(fill="x", pady=3)
+        self._ref_btn.pack(fill="x", pady=2)
 
-        separator(inner, color=BORDER).pack(fill="x", pady=(8, 6))
+        separator(inner, color=BORDER).pack(fill="x", pady=(6, 4))
 
         # Dart / visit controls
         dart_row = tk.Frame(inner, bg=SURFACE)
@@ -261,14 +257,14 @@ class GameScreen(tk.Frame):
         self._undo_visit_btn = tk.Button(inner, text="⏮  Undo Visit  [U]",
                                           command=self._undo_committed_visit,
                                           **BTN_GHOST)
-        self._undo_visit_btn.pack(fill="x", pady=(4, 0))
+        self._undo_visit_btn.pack(fill="x", pady=(2, 0))
 
         # Commit — main CTA
         tk.Frame(inner, bg=SURFACE).pack(fill="both", expand=True)
 
         self._commit_btn = tk.Button(inner, text="✓  Commit Visit  [Enter]",
                                       command=self._commit_visit, **BTN_PRIMARY)
-        self._commit_btn.pack(fill="x", pady=(8, 0), ipady=4)
+        self._commit_btn.pack(fill="x", pady=(6, 0), ipady=4)
 
         # Hover effects
         for btn, hover, normal in [
@@ -303,6 +299,7 @@ class GameScreen(tk.Frame):
             self.detector.open()
         except RuntimeError as e:
             messagebox.showerror("Camera Error", str(e))
+            self._draw_no_camera_placeholder()
 
     def _video_loop(self):
         if self._stop_event.is_set() or not self.winfo_exists():
@@ -429,11 +426,14 @@ class GameScreen(tk.Frame):
         """Small status pill in the top-left of the camera feed."""
         bd = self._board_detection
         if bd is not None:
-            dot  = (16, 212, 138)
-            text = f"BOARD DETECTED  [{bd.method}]"
+            dot     = (16, 212, 138)
+            conf_pct = int(bd.confidence * 100)
+            text    = f"BOARD DETECTED  {conf_pct}%  [{bd.method}]"
         else:
             dot  = (90, 90, 140)
-            text = "SCANNING FOR BOARD..."
+            # Animated scanning dots based on frame counter
+            dots = "." * (1 + (self._detect_ctr // 10) % 3)
+            text = f"SCANNING{dots}"
 
         pad_l, pad_t = 10, 8
         text_w = len(text) * 7 + 36
@@ -442,8 +442,9 @@ class GameScreen(tk.Frame):
         # Semi-transparent dark pill
         overlay = frame.copy()
         cv2.rectangle(overlay, (x0, y0), (x1, y1), (10, 10, 22), cv2.FILLED)
-        cv2.addWeighted(overlay, 0.72, frame, 0.28, 0, frame)
-        cv2.rectangle(frame, (x0, y0), (x1, y1), (40, 40, 65), 1)
+        cv2.addWeighted(overlay, 0.75, frame, 0.25, 0, frame)
+        border_c = (30, 80, 50) if bd is not None else (40, 40, 65)
+        cv2.rectangle(frame, (x0, y0), (x1, y1), border_c, 1)
 
         # Status dot
         cv2.circle(frame, (x0 + 14, y0 + 13), 5, dot, -1)
@@ -451,6 +452,22 @@ class GameScreen(tk.Frame):
         # Text
         cv2.putText(frame, text, (x0 + 24, y0 + 18),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.42, (190, 190, 210), 1)
+
+    def _draw_no_camera_placeholder(self):
+        """Draw a static 'No camera' placeholder on the canvas."""
+        self.canvas.delete("all")
+        cw = self.DISPLAY_W
+        ch = self.DISPLAY_H
+        self.canvas.create_rectangle(0, 0, cw, ch, fill="#05050f", outline="")
+        self.canvas.create_text(cw // 2, ch // 2 - 20,
+                                text="📷", font=("Helvetica", 36),
+                                fill=TEXT_DIM)
+        self.canvas.create_text(cw // 2, ch // 2 + 28,
+                                text="No camera found", font=FONT_HEADING,
+                                fill=TEXT_DIM)
+        self.canvas.create_text(cw // 2, ch // 2 + 60,
+                                text="Check that a webcam is connected and not in use",
+                                font=FONT_BODY, fill=TEXT_DIM)
 
     def _update_det_indicator(self):
         """Refresh the sidebar board-detection badge."""
@@ -690,9 +707,17 @@ class GameScreen(tk.Frame):
                 total_legs=self.game.num_legs,
             )
         # Update sidebar player indicator
-        name = self.game.player_names[self.game.current_player]
+        cp   = self.game.current_player
+        name = self.game.player_names[cp]
         self._turn_lbl.config(text="NOW PLAYING")
         self._player_lbl.config(text=name)
+        # Update window title
+        try:
+            self.winfo_toplevel().title(
+                f"Dart Scorer  —  {name}: {self.game.scores[cp]}"
+            )
+        except Exception:
+            pass
         # Refresh visit history display
         self._refresh_visit_history()
 
@@ -716,7 +741,7 @@ class GameScreen(tk.Frame):
         dot_color = colors.get(kind, TEXT_MID)
         self._status_dot.delete("all")
         self._status_dot.create_oval(1, 1, 9, 9, fill=dot_color, outline="")
-        text_color = colors.get(kind, TEXT_MID) if kind == "error" else TEXT_MID
+        text_color = colors.get(kind, TEXT_MID)
         self._status_msg.config(text=msg, fg=text_color)
 
         if timeout_ms > 0:
@@ -726,23 +751,22 @@ class GameScreen(tk.Frame):
             )
 
     def _refresh_visit_history(self):
-        """Show the last 3 committed visits for the current player."""
+        """Show the last 2 committed visits for the current player (compact)."""
         cp = self.game.current_player
-        # visit_history stores (player_idx, prev_score, darts_list)
         player_visits = [
-            (darts, prev_score)
-            for (pidx, prev_score, darts) in self.visit_history
+            darts
+            for (pidx, _prev, darts) in self.visit_history
             if pidx == cp
         ]
-        last3 = player_visits[-3:]
-        if not last3:
-            self._history_lbl.config(text="—")
+        last2 = player_visits[-2:]
+        if not last2:
+            self._history_lbl.config(text="")
             return
         lines = []
-        for darts, _ in reversed(last3):
-            total = sum(self.game.get_score_for_dart(d) for d in darts if d)
-            notation = "  ".join(d for d in darts if d) or "—"
-            lines.append(f"{notation}  →  {total}")
+        for darts in reversed(last2):
+            total    = sum(self.game.get_score_for_dart(d) for d in darts if d)
+            notation = " · ".join(d for d in darts if d) or "—"
+            lines.append(f"{notation}  =  {total}")
         self._history_lbl.config(text="\n".join(lines))
 
     # ════════════════════════════════════════════════════════════

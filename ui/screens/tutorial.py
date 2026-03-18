@@ -29,16 +29,17 @@ SECTIONS = [
         "steps": [
             ("Why", "Calibration tells the app exactly where the scoring rings are, "
              "so it can map a dart's pixel position to a score."),
-            ("Start", "On the game screen click 'Calibrate Board'. The camera feed "
-             "will go live."),
-            ("Click 4 points", "Click on these four corners of the double ring "
-             "(the outermost thin ring):\n"
+            ("Auto Calibrate (recommended)", "Click '✨ Auto Calibrate' on the game "
+             "screen. The app uses colour detection to find the red and green rings "
+             "automatically — works at any camera angle. Segment 20 must be at the top."),
+            ("Manual Calibrate", "If auto-calibration fails, click '🎯 Manual Calibrate' "
+             "and click these four corners of the outer double ring:\n"
              "   1. Top of the 20 segment\n"
              "   2. Right of the 6 segment\n"
              "   3. Left of the 11 segment\n"
              "   4. Bottom of the 3 segment"),
-            ("Done", "The board overlay appears. Calibrate once per session. "
-             "If the camera moves, re-calibrate."),
+            ("Done", "A coloured ring overlay appears on the camera feed. "
+             "Calibrate once per session — if the camera moves, re-calibrate."),
         ],
     },
     {

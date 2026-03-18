@@ -145,7 +145,7 @@ class DartSlot(tk.Canvas):
     A small card-like slot for one dart.
     Shows either empty (dashed outline) or a score label in dart color.
     """
-    W, H = 80, 72
+    W, H = 76, 62
 
     def __init__(self, parent, dart_index=0, **kwargs):
         super().__init__(parent, width=self.W, height=self.H,
